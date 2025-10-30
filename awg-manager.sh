@@ -156,15 +156,15 @@ ListenPort = ${SERVER_PORT}
 PrivateKey = ${SERVER_PVT_KEY}
 PostUp = iptables -t nat -A POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
 PostDown = iptables -t nat -D POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
-Jc = 5
-Jmin = 50
-Jmax = 1000
-S1 = 147
-S2 = 57
-H1 = 1121994835
-H2 = 1702292146
-H3 = 1975368295
-H4 = 1948088518
+Jc = 2
+Jmin = 10
+Jmax = 50
+S1 = 78
+S2 = 63
+H1 = 1909976304
+H2 = 379167011
+H3 = 1086133991
+H4 = 1090042050
 
 EOF
 
@@ -199,16 +199,16 @@ cat <<EOF > "keys/${USER}/${USER}.conf"
 [Interface]
 PrivateKey = ${USER_PVT_KEY}
 Address = ${USER_IP}
-DNS = 1.1.1.1, 8.8.8.8
-Jc = 5
-Jmin = 50
-Jmax = 1000
-S1 = 147
-S2 = 57
-H1 = 1121994835
-H2 = 1702292146
-H3 = 1975368295
-H4 = 1948088518
+DNS = 8.8.8.8, 8.8.4.4
+Jc = 2
+Jmin = 10
+Jmax = 50
+S1 = 78
+S2 = 63
+H1 = 1909976304
+H2 = 379167011
+H3 = 1086133991
+H4 = 1090042050
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
