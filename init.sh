@@ -93,8 +93,8 @@ install_go() {
         colorized_echo blue "Installing golang"
 
         rm -rf /opt/go && mkdir -p /opt/go && cd /opt/go
-        wget https://go.dev/dl/go1.22.2.linux-amd64.tar.gz
-        rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.2.linux-amd64.tar.gz
+        wget https://go.dev/dl/go1.25.3.linux-amd64.tar.gz
+        rm -rf /usr/local/go && tar -C /usr/local -xzf go1.25.3.linux-amd64.tar.gz
         echo "export PATH=$PATH:/usr/local/go/bin" >> /etc/profile
         source /etc/profile && source ~/.profile
         if [ -x "$(command -v go)" ]; then
