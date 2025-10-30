@@ -18,8 +18,9 @@ function usage {
   echo " -L : Lock user"
   echo " -U : Unlock user"
   echo " -p : Print user config"
-  echo " -e : Print encode user config"
   echo " -q : Print user QR code"
+  echo " -rp : Print raw user config"
+  echo " -rq : Print raw QR code"
   echo " -u <user> : User identifier (uniq field for vpn account)"
   echo " -s <server> : Server host for user connection"
   echo " -I : Interface (default auto)"
@@ -45,8 +46,8 @@ while getopts ":icdpqhLUu:I:s:" opt; do
      U) UNLOCK=1 ;;
      p) PRINT_USER_CONFIG=1 ;;
      q) PRINT_QR_CODE=1 ;;
-     pe) PRINT_RAW_USER_CONFIG=1 ;;
-     pr) PRINT_RAW_QR_CODE=1 ;;
+     rp) PRINT_RAW_USER_CONFIG=1 ;;
+     rq) PRINT_RAW_QR_CODE=1 ;;
      u) USER="$OPTARG" ;;
      I) SERVER_INTERFACE="$OPTARG" ;;
      h) usage ;;
