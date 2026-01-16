@@ -39,8 +39,8 @@ apt install build-essential curl make git wget qrencode python3 python3-pip -y
 #install Golang
 mkdir -p /opt/go
 cd /opt/go
-wget https://go.dev/dl/go1.22.0.linux-amd64.tar.gz
-rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz
+wget https://go.dev/dl/go1.25.3.linux-amd64.tar.gz
+rm -rf /usr/local/go && tar -C /usr/local -xzf go1.25.3.linux-amd64.tar.gz
 echo "export PATH=$PATH:/usr/local/go/bin" >> /etc/profile
 source /etc/profile
 # if the go version does not show, then update the session
