@@ -15,6 +15,8 @@ Options:
  -U : Unlock user
  -p : Print user config
  -q : Print user QR code
+ -rp : Print raw user config"
+ -rq : Print raw QR code"
  -u <user> : User identifier (uniq field for vpn account)
  -s <server> : Server host for user connection
  -I : Interface (default auto)
