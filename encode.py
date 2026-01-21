@@ -36,6 +36,11 @@ class WireguardConfAdditionalInterfaceData(WireguardConfInterfaceData):
     H2: int
     H3: int
     H4: int
+    I1: str
+    I2: str
+    I3: str
+    I4: str
+    I5: str
 
 
 class WireguardConfPeerData(TypedDict):
@@ -137,7 +142,12 @@ def add_parameters_in_config_data(packed_config_data: WireguardConfFullData):
         'H1': '1139437039',
         'H2': '1088834137',
         'H3': '977318325',
-        'H4': '1583407056'
+        'H4': '1583407056',
+        'I1': '<b 0x4849>',
+        'I2': '<r 32>',
+        'I3': '<t>',
+        'I4': '<rd 8><rc 4>',
+        'I5': '<c>'
     }
 
     packed_config_data['Interface'].update(additional_parameters)
@@ -177,6 +187,11 @@ class AmneziaWgBuilder:
             '    "H2": "1088834137",\n'
             '    "H3": "977318325",\n'
             '    "H4": "1583407056",\n'
+            '    "I1": "<b 0x4849>",\n'
+            '    "I2": "<r 32>",\n'
+            '    "I3": "<t>",\n'
+            '    "I4": "<rd 8><rc 4>",\n'
+            '    "I5": "<c>",\n'
             '    "Jc": "7",\n'
             '    "Jmax": "1000",\n'
             '    "Jmin": "50",\n'
@@ -201,6 +216,11 @@ class AmneziaWgBuilder:
                         "H2": "1088834137",
                         "H3": "977318325",
                         "H4": "1583407056",
+                        "I1": "<b 0x4849>",
+                        "I2": "<r 32>",
+                        "I3": "<t>",
+                        "I4": "<rd 8><rc 4>",
+                        "I5": "<c>",
                         "Jc": "7",
                         "Jmax": "1000",
                         "Jmin": "50",
