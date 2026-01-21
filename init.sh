@@ -5,7 +5,7 @@ set -e
 colorized_echo() {
     local color=$1
     local text=$2
-    
+
     case $color in
         "red")
         printf "\e[91m${text}\e[0m\n";;
@@ -110,7 +110,7 @@ install_awg_awg_tools() {
         colorized_echo green "amnezia install"
     else
         colorized_echo blue "Installing AWG"
-        
+
         if [ -x "$(command -v amneziawg-go)" ]; then
             colorized_echo green "amneziawg-go install"
         else
