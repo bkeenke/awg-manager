@@ -34,7 +34,7 @@ Or
 
 ```bash
 apt update && apt upgrade -y
-apt install build-essential curl make git wget qrencode python3 python3-pip -y
+apt install build-essential curl make git wget qrencode -y
 
 #install Golang
 mkdir -p /opt/go
