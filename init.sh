@@ -33,7 +33,6 @@ installing() {
     install_go
     install_awg_awg_tools
     install_awg_manager
-    install_encode_file
 }
 check_running_as_root() {
     if [ "$(id -u)" != "0" ]; then
@@ -77,9 +76,7 @@ install_package () {
         make \
         git \
         wget \
-        qrencode \
-        python3 \
-        python3-pip
+        qrencode
     else
         colorized_echo red "Unsupported operating system"
         exit 1
@@ -87,84 +84,147 @@ install_package () {
 }
 
 install_go() {
-    if [ -x "$(command -v go)" ]; then
-        colorized_echo green "golang install"
-    else
-        colorized_echo blue "Installing golang"
+    if command -v go &> /dev/null; then
+        colorized_echo green "Go already installed: $(go version)"
+        return 0
+    fi
 
-        rm -rf /opt/go && mkdir -p /opt/go && cd /opt/go
-        wget https://go.dev/dl/go1.25.3.linux-amd64.tar.gz
-        rm -rf /usr/local/go && tar -C /usr/local -xzf go1.25.3.linux-amd64.tar.gz
-        echo "export PATH=$PATH:/usr/local/go/bin" >> /etc/profile
-        source /etc/profile && source ~/.profile
-        if [ -x "$(command -v go)" ]; then
-            colorized_echo green "golang install"
-        else
-            colorized_echo red "golang not found"
-            exit 1
-        fi
+    colorized_echo blue "Installing Go..."
+
+    local GO_VERSION="1.25.3"
+    local GO_ARCHIVE="go${GO_VERSION}.linux-amd64.tar.gz"
+    local TEMP_DIR=$(mktemp -d)
+
+    cd "$TEMP_DIR"
+    wget -q "https://go.dev/dl/${GO_ARCHIVE}" || {
+        colorized_echo red "Failed to download Go"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    }
+
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf "$GO_ARCHIVE" || {
+        colorized_echo red "Failed to extract Go"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    }
+
+    # Cleanup temp directory
+    rm -rf "$TEMP_DIR"
+
+    # Add to PATH
+    if ! grep -q '/usr/local/go/bin' /etc/profile; then
+        echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+    fi
+    export PATH=$PATH:/usr/local/go/bin
+
+    if command -v go &> /dev/null; then
+        colorized_echo green "Go installed successfully: $(go version)"
+    else
+        colorized_echo red "Go installation failed"
+        exit 1
     fi
 }
 install_awg_awg_tools() {
-    if [ -x "$(command -v awg)" ]; then
-        colorized_echo green "amnezia install"
-    else
-        colorized_echo blue "Installing AWG"
+    # Check if awg and amneziawg-go are already installed
+    if command -v awg &> /dev/null && command -v amneziawg-go &> /dev/null; then
+        colorized_echo green "AmneziaWG already installed"
+        return 0
+    fi
 
-        if [ -x "$(command -v amneziawg-go)" ]; then
-            colorized_echo green "amneziawg-go install"
+    # Install amneziawg-go
+    if ! command -v amneziawg-go &> /dev/null; then
+        colorized_echo blue "Installing amneziawg-go..."
+
+        rm -rf /opt/amnezia-go
+        git clone https://github.com/amnezia-vpn/amneziawg-go.git /opt/amnezia-go || {
+            colorized_echo red "Failed to clone amneziawg-go"
+            exit 1
+        }
+
+        cd /opt/amnezia-go
+        make || {
+            colorized_echo red "Failed to build amneziawg-go"
+            exit 1
+        }
+
+        cp /opt/amnezia-go/amneziawg-go /usr/bin/amneziawg-go
+        chmod +x /usr/bin/amneziawg-go
+
+        # Cleanup
+        rm -rf /opt/amnezia-go
+
+        if command -v amneziawg-go &> /dev/null; then
+            colorized_echo green "amneziawg-go installed successfully"
         else
-            colorized_echo blue "Installing amneziawg-go"
-            rm -rf /opt/amnezia-go && mkdir -p /opt/amnezia-go && cd /opt/amnezia-go
-            git clone https://github.com/amnezia-vpn/amneziawg-go.git /opt/amnezia-go
-            make
-            cp /opt/amnezia-go/amneziawg-go /usr/bin/amneziawg-go
-            if [ -x "$(command -v amneziawg-go)" ]; then
-                colorized_echo green "amneziawg-go install"
-            else
-                colorized_echo red "amneziawg-go not install"
-                exit 1
-            fi
-        fi
-        colorized_echo blue "Installing awg-tools"
-        rm -rf /opt/amnezia-tools && mkdir -p /opt/amnezia-tools
-        git clone https://github.com/amnezia-vpn/amneziawg-tools.git /opt/amnezia-tools
-        cd /opt/amnezia-tools/src
-        make && make install
-        if [ -x "$(command -v awg)" ]; then
-            colorized_echo green "amnezia install"
-        else
-            colorized_echo red "amnezia not install"
+            colorized_echo red "amneziawg-go installation failed"
             exit 1
         fi
+    else
+        colorized_echo green "amneziawg-go already installed"
+    fi
+
+    # Install awg-tools
+    if ! command -v awg &> /dev/null; then
+        colorized_echo blue "Installing awg-tools..."
+
+        rm -rf /opt/amnezia-tools
+        git clone https://github.com/amnezia-vpn/amneziawg-tools.git /opt/amnezia-tools || {
+            colorized_echo red "Failed to clone amneziawg-tools"
+            exit 1
+        }
+
+        cd /opt/amnezia-tools/src
+        make || {
+            colorized_echo red "Failed to build awg-tools"
+            exit 1
+        }
+        make install || {
+            colorized_echo red "Failed to install awg-tools"
+            exit 1
+        }
+
+        # Cleanup
+        rm -rf /opt/amnezia-tools
+
+        if command -v awg &> /dev/null; then
+            colorized_echo green "awg-tools installed successfully"
+        else
+            colorized_echo red "awg-tools installation failed"
+            exit 1
+        fi
+    else
+        colorized_echo green "awg-tools already installed"
     fi
 }
 install_awg_manager() {
-    if [ ! -f /etc/amnezia/amneziawg/awg-manager.sh ]; then
-        colorized_echo blue "Downloading awg-manager"
-        wget -O- https://raw.githubusercontent.com/bkeenke/awg-manager/master/awg-manager.sh > /etc/amnezia/amneziawg/awg-manager.sh
-        chmod 700 /etc/amnezia/amneziawg/awg-manager.sh
-        if [ ! -f /etc/amnezia/amneziawg/awg-manager.sh ]; then
-            colorized_echo red "awg-manager.sh not found"
-            exit 1
-        fi
-        colorized_echo green "awg-manager.sh downloads"
-    else
-        colorized_echo green "skip"
+    local AWG_DIR="/etc/amnezia/amneziawg"
+    local AWG_SCRIPT="${AWG_DIR}/awg-manager.sh"
+
+    if [ -f "$AWG_SCRIPT" ]; then
+        colorized_echo green "awg-manager.sh already installed"
+        return 0
     fi
-}
-install_encode_file() {
-    if [ ! -f /etc/amnezia/amneziawg/encode.py ]; then
-        colorized_echo blue "Downloading encode.py"
-        wget -O- https://raw.githubusercontent.com/bkeenke/awg-manager/master/encode.py > /etc/amnezia/amneziawg/encode.py
-        pip3 install PyQt6
-        if [ ! -f /etc/amnezia/amneziawg/encode.py ]; then
-            colorized_echo red "encode.py not found"
-            exit 1
-        fi
-        colorized_echo green "encode.py downloads"
+
+    colorized_echo blue "Installing awg-manager..."
+
+    mkdir -p "$AWG_DIR" || {
+        colorized_echo red "Failed to create directory ${AWG_DIR}"
+        exit 1
+    }
+
+    wget -q -O "$AWG_SCRIPT" https://raw.githubusercontent.com/bkeenke/awg-manager/master/awg-manager.sh || {
+        colorized_echo red "Failed to download awg-manager.sh"
+        exit 1
+    }
+
+    chmod 700 "$AWG_SCRIPT"
+
+    if [ -f "$AWG_SCRIPT" ]; then
+        colorized_echo green "awg-manager.sh installed successfully"
     else
-        colorized_echo green "skip"
+        colorized_echo red "awg-manager.sh installation failed"
+        exit 1
     fi
 }
 case "$1" in

@@ -19,8 +19,6 @@ function usage {
   echo " -U : Unlock user"
   echo " -p : Print user config"
   echo " -q : Print user QR code"
-  echo " -rp : Print raw user config"
-  echo " -rq : Print raw QR code"
   echo " -u <user> : User identifier (uniq field for vpn account)"
   echo " -s <server> : Server host for user connection"
   echo " -I : Interface (default auto)"
@@ -46,8 +44,6 @@ while getopts ":icdpqhLUu:I:s:" opt; do
      U) UNLOCK=1 ;;
      p) PRINT_USER_CONFIG=1 ;;
      q) PRINT_QR_CODE=1 ;;
-     rp) PRINT_RAW_USER_CONFIG=1 ;;
-     rq) PRINT_RAW_QR_CODE=1 ;;
      u) USER="$OPTARG" ;;
      I) SERVER_INTERFACE="$OPTARG" ;;
      h) usage ;;
@@ -83,11 +79,6 @@ function get_new_ip {
 
     echo "${SERVER_IP_PREFIX}.${IP}/32"
 }
-
-function encode {
-    python3 encode.py ${USER} > keys/${USER}/${USER}.vpn
-}
-
 
 function add_user_to_server {
     if [ ! -f "keys/${USER}/public.key" ]; then
@@ -221,7 +212,6 @@ AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 20
 PresharedKey = ${USER_PSK_KEY}
 EOF
-    encode
     add_user_to_server
     reload_server
 }
@@ -270,12 +260,6 @@ if [ $PRINT_USER_CONFIG ]; then
     cat "keys/${USER}/${USER}.conf"
 elif [ $PRINT_QR_CODE ]; then
     qrencode -t ansiutf8 < "keys/${USER}/${USER}.conf"
-fi
-
-if [ $PRINT_RAW_USER_CONFIG ]; then
-    cat "keys/${USER}/${USER}.vpn"
-elif [ $PRINT_RAW_QR_CODE ]; then
-    qrencode -t ansiutf8 < "keys/${USER}/${USER}.vpn"
 fi
 
 
