@@ -22,7 +22,7 @@ function usage {
   echo " -u <user> : User identifier (uniq field for vpn account)"
   echo " -s <server> : Server host for user connection"
   echo " -I : Interface (default auto)"
-  echo " -h : Usage"
+  echo " -h, --help : Usage"
   exit 1
 }
 
@@ -35,7 +35,14 @@ SERVER_IP_PREFIX="10.10.10"
 SERVER_PORT=43748
 SERVER_INTERFACE=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
 
-while getopts ":icdpqhLUu:I:s:" opt; do
+# Support --help
+for arg in "$@"; do
+  if [ "$arg" == "--help" ]; then
+    usage
+  fi
+done
+
+while getopts ":icdpqhLUu:I:s:h" opt; do
   case $opt in
      i) INIT=1 ;;
      c) CREATE=1 ;;
