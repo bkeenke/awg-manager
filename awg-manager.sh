@@ -144,6 +144,64 @@ function init {
 
     SERVER_PVT_KEY=$(cat "keys/$SERVER_NAME/private.key")
 
+    if [ ! -f "keys/params.conf" ]; then
+        JC=$(( RANDOM % 11 ))
+        JMIN=$(( 64 + RANDOM % 448 ))
+        JMAX=$(( JMIN + RANDOM % (1025 - JMIN) ))
+        S1=$(( RANDOM % 65 ))
+        S2=$(( RANDOM % 65 ))
+        S3=$(( RANDOM % 65 ))
+        S4=$(( RANDOM % 33 ))
+        H1=$(( RANDOM << 16 | RANDOM ))
+        H2=$(( RANDOM << 16 | RANDOM ))
+        H3=$(( RANDOM << 16 | RANDOM ))
+        H4=$(( RANDOM << 16 | RANDOM ))
+        I1=$(openssl rand -hex 16)
+        I2=$(openssl rand -hex 16)
+        I3=$(openssl rand -hex 16)
+        I4=$(openssl rand -hex 16)
+        I5=$(openssl rand -hex 16)
+
+        cat <<EOF > "keys/params.conf"
+Jc = ${JC}
+Jmin = ${JMIN}
+Jmax = ${JMAX}
+S1 = ${S1}
+S2 = ${S2}
+S3 = ${S3}
+S4 = ${S4}
+H1 = ${H1}
+H2 = ${H2}
+H3 = ${H3}
+H4 = ${H4}
+I1 = ${I1}
+I2 = ${I2}
+I3 = ${I3}
+I4 = ${I4}
+I5 = ${I5}
+EOF
+    fi
+
+    source "keys/params.conf" || {
+        # Fallback if source fails due to spaces around =
+        JC=$(grep "^Jc\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        JMIN=$(grep "^Jmin\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        JMAX=$(grep "^Jmax\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        S1=$(grep "^S1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        S2=$(grep "^S2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        S3=$(grep "^S3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        S4=$(grep "^S4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        H1=$(grep "^H1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        H2=$(grep "^H2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        H3=$(grep "^H3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        H4=$(grep "^H4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        I1=$(grep "^I1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        I2=$(grep "^I2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        I3=$(grep "^I3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        I4=$(grep "^I4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        I5=$(grep "^I5\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    }
+
 cat <<EOF > "$SERVER_NAME.conf"
 [Interface]
 Address = ${SERVER_IP_PREFIX}.1/32
@@ -151,15 +209,22 @@ ListenPort = ${SERVER_PORT}
 PrivateKey = ${SERVER_PVT_KEY}
 PostUp = iptables -t nat -A POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
 PostDown = iptables -t nat -D POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
-Jc = 3
-Jmin = 10
-Jmax = 50
-S1 = 130
-S2 = 146
-H1 = 1330785828
-H2 = 974728806
-H3 = 274661604
-H4 = 1001776073
+Jc = ${JC}
+Jmin = ${JMIN}
+Jmax = ${JMAX}
+S1 = ${S1}
+S2 = ${S2}
+S3 = ${S3}
+S4 = ${S4}
+H1 = ${H1}
+H2 = ${H2}
+H3 = ${H3}
+H4 = ${H4}
+I1 = ${I1}
+I2 = ${I2}
+I3 = ${I3}
+I4 = ${I4}
+I5 = ${I5}
 
 EOF
 
@@ -183,27 +248,52 @@ function create {
     USER_IP=$( get_new_ip )
 
     mkdir "keys/${USER}"
-    awg genkey | tee "keys/${USER}/private.key" | awg pubkey > "keys/${USER}/public.key" | awg genpsk > "keys/${USER}/psk.key"
+    awg genkey | tee "keys/${USER}/private.key" | awg pubkey > "keys/${USER}/public.key"
+    awg genpsk > "keys/${USER}/psk.key"
 
     USER_PVT_KEY=$(cat "keys/${USER}/private.key")
     USER_PUB_KEY=$(cat "keys/${USER}/public.key")
     USER_PSK_KEY=$(cat "keys/${USER}/psk.key")
     SERVER_PUB_KEY=$(cat "keys/$SERVER_NAME/public.key")
 
+    JC=$(grep "^Jc\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    JMIN=$(grep "^Jmin\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    JMAX=$(grep "^Jmax\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    S1=$(grep "^S1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    S2=$(grep "^S2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    S3=$(grep "^S3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    S4=$(grep "^S4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    H1=$(grep "^H1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    H2=$(grep "^H2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    H3=$(grep "^H3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    H4=$(grep "^H4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    I1=$(grep "^I1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    I2=$(grep "^I2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    I3=$(grep "^I3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    I4=$(grep "^I4\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    I5=$(grep "^I5\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+
 cat <<EOF > "keys/${USER}/${USER}.conf"
 [Interface]
 PrivateKey = ${USER_PVT_KEY}
 Address = ${USER_IP}
 DNS = 8.8.8.8, 8.8.4.4
-Jc = 3
-Jmin = 10
-Jmax = 50
-S1 = 130
-S2 = 146
-H1 = 1330785828
-H2 = 974728806
-H3 = 274661604
-H4 = 1001776073
+Jc = ${JC}
+Jmin = ${JMIN}
+Jmax = ${JMAX}
+S1 = ${S1}
+S2 = ${S2}
+S3 = ${S3}
+S4 = ${S4}
+H1 = ${H1}
+H2 = ${H2}
+H3 = ${H3}
+H4 = ${H4}
+I1 = ${I1}
+I2 = ${I2}
+I3 = ${I3}
+I4 = ${I4}
+I5 = ${I5}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
