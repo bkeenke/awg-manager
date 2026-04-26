@@ -170,30 +170,30 @@ function init {
         I5=$(openssl rand -hex 16)
 
         cat <<EOF > "keys/params.conf"
-Jc = ${JC}
-Jmin = ${JMIN}
-Jmax = ${JMAX}
-S1 = ${S1}
-S2 = ${S2}
-S3 = ${S3}
-S4 = ${S4}
-H1 = ${H1}
-H2 = ${H2}
-H3 = ${H3}
-H4 = ${H4}
-I1 = ${I1}
-I2 = ${I2}
-I3 = ${I3}
-I4 = ${I4}
-I5 = ${I5}
+JC=${JC}
+JMIN=${JMIN}
+JMAX=${JMAX}
+S1=${S1}
+S2=${S2}
+S3=${S3}
+S4=${S4}
+H1=${H1}
+H2=${H2}
+H3=${H3}
+H4=${H4}
+I1=${I1}
+I2=${I2}
+I3=${I3}
+I4=${I4}
+I5=${I5}
 EOF
     fi
 
-    source "keys/params.conf" || {
-        # Fallback if source fails due to spaces around =
-        JC=$(grep "^Jc\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
-        JMIN=$(grep "^Jmin\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
-        JMAX=$(grep "^Jmax\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    source "keys/params.conf" 2>/dev/null || {
+        # Fallback if source fails
+        JC=$(grep "^JC\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        JMIN=$(grep "^JMIN\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+        JMAX=$(grep "^JMAX\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
         S1=$(grep "^S1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
         S2=$(grep "^S2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
         S3=$(grep "^S3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
@@ -263,9 +263,9 @@ function create {
     USER_PSK_KEY=$(cat "keys/${USER}/psk.key")
     SERVER_PUB_KEY=$(cat "keys/$SERVER_NAME/public.key")
 
-    JC=$(grep "^Jc\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
-    JMIN=$(grep "^Jmin\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
-    JMAX=$(grep "^Jmax\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    JC=$(grep "^JC\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    JMIN=$(grep "^JMIN\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
+    JMAX=$(grep "^JMAX\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
     S1=$(grep "^S1\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
     S2=$(grep "^S2\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
     S3=$(grep "^S3\s*=" "keys/params.conf" | cut -d'=' -f2 | tr -d ' ')
