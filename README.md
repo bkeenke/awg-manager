@@ -38,6 +38,7 @@ cp .env.example .env
 | `HOME_DIR` | `/etc/amnezia/amneziawg` | Directory with server configs and `keys/` |
 | `SERVER_NAME` | `awg0` | Interface / server config name (`<SERVER_NAME>.conf`) |
 | `SERVER_IP_PREFIX` | `10.10.90` | First three octets of the VPN subnet (server gets `.1`) |
+| `SERVER_IP6_PREFIX` | — | IPv6 prefix ending with `::`, e.g. `fd10:10:90::` (server gets `::1`); empty = IPv4 only |
 | `SERVER_PORT` | `43748` | UDP listen port |
 | `SERVER_INTERFACE` | auto (default route) | External interface for NAT; `-I` overrides it |
 | `SERVER_HOST` | — | Host/IP clients connect to; `-s` overrides it |
@@ -147,6 +148,31 @@ An address is considered taken if it is found in any of:
 
 Only single addresses (`/32` or without mask) from the `SERVER_IP_PREFIX` subnet are counted; routed subnets in `AllowedIPs` are ignored.
 If you change a peer address by hand, keep the user config `Address` and the server `AllowedIPs` in sync.
+
+### IPv6
+
+With `SERVER_IP6_PREFIX` set each user also gets an IPv6 address with the same host number written in hex
+(`10.10.90.10` → `fd10:10:90::a`), IPv6 DNS servers and `AllowedIPs = 0.0.0.0/0, ::/0`, so IPv6 traffic
+goes through the tunnel instead of leaking past it. A ULA prefix (`fc…`/`fd…`) is NATed to the server's IPv6 address,
+any other prefix is routed as is (no NAT66): it must be routed to the server by the provider (for Oracle Cloud: a route
+rule for the prefix with the instance as the target and source/destination check skipped on its VNIC).
+On init the script also enables `net.ipv6.conf.all.forwarding`.
+
+To add IPv6 to an existing server: add `<prefix>1/128` to `Address` and the `ip6tables` `PostUp`/`PostDown` lines
+(see below) to `<server>.conf`, then add an IPv6 address to `Address` of each user config and lock/unlock the user
+(`-L`, `-U`) to rewrite the peer in the server config. Users have to re-import their configs.
+
+## Firewall
+
+On init `PostUp`/`PostDown` rules are written to the server config, so they exist only while the interface is up:
+
+ - the UDP listen port is opened in `INPUT` (IPv4 and IPv6);
+ - traffic from clients to `SERVER_INTERFACE` and replies back are allowed in `FORWARD` (images like Oracle Cloud Ubuntu end `FORWARD` with `REJECT`);
+ - new connections from `SERVER_INTERFACE` to clients are dropped in `FORWARD` (matters for a public IPv6 prefix);
+ - clients are NATed (`MASQUERADE`) on `SERVER_INTERFACE`.
+
+The `FORWARD` rules are added for IPv6 too when `SERVER_IP6_PREFIX` is set, the IPv6 NAT rule only for a ULA prefix.
+Traffic between clients is not allowed; add `PostUp = iptables -I FORWARD 1 -i %i -o %i -j ACCEPT` (and the matching `PostDown`) if needed.
 
 ## Usage amneziawg-go
 

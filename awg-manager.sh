@@ -33,7 +33,7 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 if [ -f "${SCRIPT_DIR}/.env" ]; then
     # Variables set in the environment take precedence over .env
     declare -A ENV_OVERRIDES
-    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST; do
+    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_IP6_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST; do
         if [ -n "${!VAR+x}" ]; then
             ENV_OVERRIDES[$VAR]="${!VAR}"
         fi
@@ -48,6 +48,8 @@ HOME_DIR="${HOME_DIR:-/etc/amnezia/amneziawg}"
 SERVER_NAME="${SERVER_NAME:-awg0}"
 KEYS_DIR="keys/${SERVER_NAME}"
 SERVER_IP_PREFIX="${SERVER_IP_PREFIX:-10.10.90}"
+# IPv6 prefix ending with "::" (e.g. fd10:10:90::), empty = IPv4 only
+SERVER_IP6_PREFIX="${SERVER_IP6_PREFIX}"
 SERVER_PORT="${SERVER_PORT:-43748}"
 SERVER_INTERFACE="${SERVER_INTERFACE:-$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)}"
 SERVER_HOST="${SERVER_HOST}"
@@ -110,6 +112,20 @@ function get_new_ip {
     echo "${SERVER_IP_PREFIX}.${IP}/32"
 }
 
+# IPv6 address with the same host number as the IPv4 one (10.10.90.10 -> <prefix>a)
+function ip6_for {
+    printf '%s%x/128' "${SERVER_IP6_PREFIX}" "${1##*.}"
+}
+
+# Addresses from the Address line of a user config: IPv4 and IPv6 (if any), without masks
+function user_ip4 {
+    grep -iP '^\s*Address\s*=' "$1" | grep -Po '(?<![\d.])\d+\.\d+\.\d+\.\d+' | head -1
+}
+
+function user_ip6 {
+    grep -iP '^\s*Address\s*=' "$1" | grep -Po '[0-9A-Fa-f]*:[0-9A-Fa-f:]+(?=/128)' | head -1
+}
+
 function add_user_to_server {
     if [ ! -f "${KEYS_DIR}/${USER}/public.key" ]; then
         echo "ERROR: User not exists" >&2
@@ -118,7 +134,8 @@ function add_user_to_server {
 
     local USER_PUB_KEY=$(cat "${KEYS_DIR}/${USER}/public.key")
     local USER_PSK_KEY=$(cat "${KEYS_DIR}/$USER/psk.key")
-    local USER_IP=$(grep -i Address "${KEYS_DIR}/${USER}/${USER}.conf" | sed 's/Address\s*=\s*//i; s/\/.*//')
+    local USER_IP=$(user_ip4 "${KEYS_DIR}/${USER}/${USER}.conf")
+    local USER_IP6=$(user_ip6 "${KEYS_DIR}/${USER}/${USER}.conf")
 
     if grep "# BEGIN ${USER}$" "$SERVER_NAME.conf" >/dev/null ; then
         echo "User already exists"
@@ -129,19 +146,22 @@ cat <<EOF >> "$SERVER_NAME.conf"
 # BEGIN ${USER}
 [Peer]
 PublicKey = ${USER_PUB_KEY}
-AllowedIPs = ${USER_IP}
+AllowedIPs = ${USER_IP}${USER_IP6:+, ${USER_IP6}/128}
 PresharedKey = ${USER_PSK_KEY}
 # END ${USER}
 EOF
 
     ip -4 route add ${USER_IP}/32 dev ${SERVER_NAME} || true
+    [ -z "$USER_IP6" ] || ip -6 route add ${USER_IP6}/128 dev ${SERVER_NAME} || true
 }
 
 function remove_user_from_server {
     sed -i "/# BEGIN ${USER}$/,/# END ${USER}$/d" "$SERVER_NAME.conf"
     if [ -f "${KEYS_DIR}/${USER}/${USER}.conf" ]; then
-        local USER_IP=$(grep -i Address "${KEYS_DIR}/${USER}/${USER}.conf" | sed 's/Address\s*=\s*//i; s/\/.*//')
+        local USER_IP=$(user_ip4 "${KEYS_DIR}/${USER}/${USER}.conf")
+        local USER_IP6=$(user_ip6 "${KEYS_DIR}/${USER}/${USER}.conf")
         ip -4 route del ${USER_IP}/32 dev ${SERVER_NAME} || true
+        [ -z "$USER_IP6" ] || ip -6 route del ${USER_IP6}/128 dev ${SERVER_NAME} || true
     fi
 }
 
@@ -225,13 +245,38 @@ function init {
     I4=$(openssl rand -hex 16 | tr '[:lower:]' '[:upper:]'); I4="<b 0x${I4}>"
     I5=$(openssl rand -hex 16 | tr '[:lower:]' '[:upper:]'); I5="<b 0x${I5}>"
 
+    # Open the listen port, let clients out (FORWARD may end with REJECT) and NAT them.
+    # A public IPv6 prefix is routed without NAT; new connections from outside to clients are dropped.
+    local IPT IPTABLES=iptables
+    [ -z "$SERVER_IP6_PREFIX" ] || IPTABLES="iptables ip6tables"
+    local FIREWALL=""
+    for IPT in $IPTABLES; do
+        if [ "$IPT" == "iptables" ] || [[ "${SERVER_IP6_PREFIX,,}" =~ ^f[cd] ]]; then
+            FIREWALL+="PostUp = ${IPT} -t nat -A POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
+PostDown = ${IPT} -t nat -D POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
+"
+        fi
+        # Inserted at the top one by one, so they end up in reverse order: ACCEPT out, ACCEPT replies, DROP the rest
+        FIREWALL+="PostUp = ${IPT} -I FORWARD 1 -i ${SERVER_INTERFACE} -o %i -j DROP
+PostDown = ${IPT} -D FORWARD -i ${SERVER_INTERFACE} -o %i -j DROP
+PostUp = ${IPT} -I FORWARD 1 -i ${SERVER_INTERFACE} -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+PostDown = ${IPT} -D FORWARD -i ${SERVER_INTERFACE} -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+PostUp = ${IPT} -I FORWARD 1 -i %i -o ${SERVER_INTERFACE} -j ACCEPT
+PostDown = ${IPT} -D FORWARD -i %i -o ${SERVER_INTERFACE} -j ACCEPT
+"
+    done
+    for IPT in iptables ip6tables; do
+        FIREWALL+="PostUp = ${IPT} -I INPUT 1 -p udp -m udp --dport ${SERVER_PORT} -j ACCEPT
+PostDown = ${IPT} -D INPUT -p udp -m udp --dport ${SERVER_PORT} -j ACCEPT
+"
+    done
+
 cat <<EOF > "$SERVER_NAME.conf"
 [Interface]
-Address = ${SERVER_IP_PREFIX}.1/32
+Address = ${SERVER_IP_PREFIX}.1/32${SERVER_IP6_PREFIX:+, ${SERVER_IP6_PREFIX}1/128}
 ListenPort = ${SERVER_PORT}
 PrivateKey = ${SERVER_PVT_KEY}
-PostUp = iptables -t nat -A POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
+${FIREWALL%$'\n'}
 Jc = ${JC}
 Jmin = ${JMIN}
 Jmax = ${JMAX}
@@ -252,6 +297,13 @@ I5 = ${I5}
 EOF
 
     echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
+    if [ -n "$SERVER_IP6_PREFIX" ]; then
+        echo net.ipv6.conf.all.forwarding=1 >> /etc/sysctl.conf
+        # With forwarding on the kernel ignores router advertisements unless accept_ra=2
+        if [ "$(sysctl -n net.ipv6.conf.${SERVER_INTERFACE}.accept_ra)" == "1" ]; then
+            echo net.ipv6.conf.${SERVER_INTERFACE}.accept_ra=2 >> /etc/sysctl.conf
+        fi
+    fi
     sysctl -p
 
     systemctl enable awg-quick@${SERVER_NAME}
@@ -286,6 +338,8 @@ function create {
     fi
 
     USER_IP=$( get_new_ip )
+    local USER_IP6=""
+    [ -z "$SERVER_IP6_PREFIX" ] || USER_IP6=$( ip6_for "${USER_IP%/*}" )
 
     mkdir -p "${KEYS_DIR}/${USER}"
     awg genkey | tee "${KEYS_DIR}/${USER}/private.key" | awg pubkey > "${KEYS_DIR}/${USER}/public.key"
@@ -302,14 +356,14 @@ function create {
 cat <<EOF > "${KEYS_DIR}/${USER}/${USER}.conf"
 [Interface]
 PrivateKey = ${USER_PVT_KEY}
-Address = ${USER_IP}
-DNS = 8.8.8.8, 8.8.4.4
+Address = ${USER_IP}${USER_IP6:+, ${USER_IP6}}
+DNS = 8.8.8.8, 8.8.4.4${USER_IP6:+, 2001:4860:4860::8888, 2001:4860:4860::8844}
 ${AWG_PARAMS}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
 Endpoint = ${EFFECTIVE_SERVER_HOST}:${SERVER_PORT}
-AllowedIPs = 0.0.0.0/0
+AllowedIPs = 0.0.0.0/0${USER_IP6:+, ::/0}
 PersistentKeepalive = 20
 PresharedKey = ${USER_PSK_KEY}
 EOF
