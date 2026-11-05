@@ -70,6 +70,48 @@ SERVER_NAME=awg1 SERVER_IP_PREFIX=10.10.91 ./awg-manager.sh -c -u my_user
 Variables passed this way override the values from `.env`. With `sudo` put them after `sudo`
 (`sudo SERVER_NAME=awg1 SERVER_IP_PREFIX=10.10.91 ./awg-manager.sh ...`), because `sudo` resets the environment.
 
+Another way is a separate clone of the repository per server, each with its own `.env`
+(e.g. `/root/awg-manager` for `awg0` and `/root/awg-manager-awg1` for `awg1`).
+
+### Examples
+
+VPN to the internet with public IPv6 addresses for clients:
+
+```bash
+SERVER_NAME="awg1"
+SERVER_IP_PREFIX="10.10.97"
+SERVER_IP6_PREFIX="2001:db8:0:1:97::"
+SERVER_PORT=43749
+SERVER_INTERFACE=ens3
+SERVER_HOST=vpn.example.com
+```
+
+Same with private IPv6 addresses (NAT66): `SERVER_IP6_PREFIX="fd10:10:97::"`. Without `SERVER_IP6_PREFIX` clients get IPv4 only.
+
+VPN between clients only (no internet through the server, no DNS):
+
+```bash
+SERVER_NAME="awg0"
+SERVER_IP_PREFIX="10.10.96"
+SERVER_PORT=43748
+SERVER_MODE=local
+SERVER_HOST=vpn.example.com
+```
+
+Clients of this server get `AllowedIPs = 10.10.96.0/24` and keep their own internet connection and DNS.
+
+### Settings apply to new configs only
+
+`SERVER_*` values are written to `<server>.conf` on init (`-i`), `CLIENT_*` values to a user config on its creation (`-c`).
+Init does nothing if `<server>.conf` already exists, and existing user configs are never rewritten.
+After changing `.env` for a running server edit the configs by hand:
+
+ - server: `Address` and `PostUp`/`PostDown` in `<server>.conf`; the easiest way is to init a test server
+   with the same `.env` (e.g. `SERVER_NAME=awgtest`) and copy the lines from its config;
+   then `systemctl restart awg-quick@<server>`;
+ - users: `Address`, `DNS`, `AllowedIPs` in `keys/<server>/<user>/<user>.conf`, then lock/unlock each user (`-L`, `-U`)
+   to rewrite its peer in the server config. Users have to re-import their configs (`-p` or `-q`).
+
 ## Files layout
 
 ```
@@ -157,13 +199,14 @@ If you change a peer address by hand, keep the user config `Address` and the ser
 With `SERVER_IP6_PREFIX` set each user also gets an IPv6 address with the same host number written in hex
 (`10.10.90.10` → `fd10:10:90::a`), IPv6 DNS servers and `AllowedIPs = 0.0.0.0/0, ::/0`, so IPv6 traffic
 goes through the tunnel instead of leaking past it. A ULA prefix (`fc…`/`fd…`) is NATed to the server's IPv6 address,
-any other prefix is routed as is (no NAT66): it must be routed to the server by the provider (for Oracle Cloud: a route
-rule for the prefix with the instance as the target and source/destination check skipped on its VNIC).
-On init the script also enables `net.ipv6.conf.all.forwarding`.
+any other prefix is routed as is (no NAT66): the provider must deliver the whole prefix to the server
+(see [Oracle Cloud](#oracle-cloud)). Use a prefix of `/120` or shorter: user addresses are `<prefix>2` … `<prefix>fe`.
+On init the script also enables `net.ipv6.conf.all.forwarding` (and `accept_ra=2` on `SERVER_INTERFACE`
+if the kernel handles router advertisements there, otherwise forwarding would make it drop the IPv6 default route).
 
-To add IPv6 to an existing server: add `<prefix>1/128` to `Address` and the `ip6tables` `PostUp`/`PostDown` lines
-(see below) to `<server>.conf`, then add an IPv6 address to `Address` of each user config and lock/unlock the user
-(`-L`, `-U`) to rewrite the peer in the server config. Users have to re-import their configs.
+To add IPv6 to an existing server see [Settings apply to new configs only](#settings-apply-to-new-configs-only):
+add `<prefix>1/128` to the server `Address` and the `ip6tables` rules (see [Firewall](#firewall)),
+`, <prefix>N/128` to each user `Address`, IPv6 DNS to `DNS` and `, ::/0` to `AllowedIPs`.
 
 ## Firewall
 
@@ -179,6 +222,71 @@ Traffic between clients is not allowed.
 
 With `SERVER_MODE=local` there is no NAT and no way out: the only `FORWARD` rule allows traffic between clients
 (`-i %i -o %i`), and user configs get no `DNS` and only the VPN subnet in `AllowedIPs`.
+
+## Oracle Cloud
+
+Notes for an Oracle Cloud Ubuntu instance:
+
+ - Ubuntu images there come with `iptables` rules in `/etc/iptables/rules.v4` (`netfilter-persistent`) that end
+   `INPUT` and `FORWARD` with `REJECT`. The `PostUp` rules from init are inserted before them, nothing has to be saved.
+ - The VCN Security List must allow the listen port: ingress UDP `SERVER_PORT` from `0.0.0.0/0` and `::/0`.
+   Ping also needs ingress ICMP type 8; by default only types 3 and 4 are allowed.
+ - IPv6 on the instance needs an IPv6 prefix on the VCN and the subnet, a `::/0` route to the Internet Gateway
+   in the route table and an egress rule for `::/0` in the Security List (the default one allows only `0.0.0.0/0`).
+ - A public `SERVER_IP6_PREFIX` must be assigned to the instance VNIC: Instance → Attached VNICs → VNIC →
+   IPv6 Addresses → Assign IPv6 address → a prefix (e.g. `/80`) from the subnet `/64`. Oracle delivers to the instance
+   only addresses assigned to its VNIC: other addresses of the subnet `/64` do not work even with proxy NDP.
+   Neither a route rule nor skipping the source/destination check is needed for an assigned prefix.
+
+## Troubleshooting
+
+### amneziawg-dkms fails to build on kernel 7.0
+
+`amneziawg-dkms` 1.0.0 fails on new Ubuntu kernels (e.g. `7.0.0-*-oracle`, `7.0.0-*-generic`): `compat/compat.h`
+decides by the kernel version that `setup_udp_tunnel_sock()` takes a `struct socket *`, but these kernels already
+take a `struct sock *`. Patch `/usr/src/amneziawg-1.0.0/compat/compat.h` to pick the argument by the real
+function type:
+
+```diff
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 5)
+ #include <net/udp_tunnel.h>
+-#define setup_udp_tunnel_sock(net, sk, sock_cfg) setup_udp_tunnel_sock(net, sk->sk_socket, sock_cfg)
+ #define udp_tunnel_sock_release(sk) udp_tunnel_sock_release(sk->sk_socket)
+ #endif
+ 
++/* Select the argument type from the actual kernel API. */
++#include <net/udp_tunnel.h>
++#define setup_udp_tunnel_sock(net, sk, sock_cfg) \
++    setup_udp_tunnel_sock((net), \
++        _Generic(&setup_udp_tunnel_sock, \
++            void (*)(struct net *, struct socket *, struct udp_tunnel_sock_cfg *): (sk)->sk_socket, \
++            default: (sk)), \
++        (sock_cfg))
++
+```
+
+Then rebuild the module, configure the packages and keep `apt upgrade` from bringing the unpatched source back:
+
+```bash
+sudo dkms remove amneziawg/1.0.0 --all
+sudo dkms install amneziawg/1.0.0 -k $(uname -r)
+sudo apt -f install
+sudo modprobe amneziawg
+sudo apt-mark hold amneziawg-dkms
+```
+
+DKMS rebuilds the module from the patched source on kernel updates.
+
+### SSH drops while building on a 1 GB instance
+
+Building the module (or anything with `apt` + a compiler) may run out of memory on small instances
+(e.g. Oracle `E2.1.Micro`). Add swap first:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
 
 ## Usage amneziawg-go
 
