@@ -42,6 +42,8 @@ cp .env.example .env
 | `SERVER_PORT` | `43748` | UDP listen port |
 | `SERVER_INTERFACE` | auto (default route) | External interface for NAT; `-I` overrides it |
 | `SERVER_HOST` | — | Host/IP clients connect to; `-s` overrides it |
+| `CLIENT_DNS` | `8.8.8.8, 8.8.4.4` (+ Google IPv6 DNS with IPv6) | `DNS` of new user configs; set it empty (`CLIENT_DNS=`) to omit the line |
+| `CLIENT_ALLOWED_IPS` | `0.0.0.0/0` (+ `::/0` with IPv6) | `AllowedIPs` of new user configs, e.g. `10.10.90.0/24` for a VPN between clients only |
 
 All variables are optional: missing ones fall back to the defaults above.
 Variables set in the environment take precedence over `.env` (see below).

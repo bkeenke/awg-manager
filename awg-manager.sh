@@ -33,7 +33,7 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 if [ -f "${SCRIPT_DIR}/.env" ]; then
     # Variables set in the environment take precedence over .env
     declare -A ENV_OVERRIDES
-    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_IP6_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST; do
+    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_IP6_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST CLIENT_DNS CLIENT_ALLOWED_IPS; do
         if [ -n "${!VAR+x}" ]; then
             ENV_OVERRIDES[$VAR]="${!VAR}"
         fi
@@ -53,6 +53,10 @@ SERVER_IP6_PREFIX="${SERVER_IP6_PREFIX}"
 SERVER_PORT="${SERVER_PORT:-43748}"
 SERVER_INTERFACE="${SERVER_INTERFACE:-$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)}"
 SERVER_HOST="${SERVER_HOST}"
+# Written to new user configs; set CLIENT_DNS empty to omit the DNS line
+# (e.g. CLIENT_ALLOWED_IPS=10.10.90.0/24 and CLIENT_DNS= for a VPN between clients only)
+CLIENT_DNS="${CLIENT_DNS-8.8.8.8, 8.8.4.4${SERVER_IP6_PREFIX:+, 2001:4860:4860::8888, 2001:4860:4860::8844}}"
+CLIENT_ALLOWED_IPS="${CLIENT_ALLOWED_IPS:-0.0.0.0/0${SERVER_IP6_PREFIX:+, ::/0}}"
 
 # Support --help, help, usage
 for arg in "$@"; do
@@ -356,14 +360,14 @@ function create {
 cat <<EOF > "${KEYS_DIR}/${USER}/${USER}.conf"
 [Interface]
 PrivateKey = ${USER_PVT_KEY}
-Address = ${USER_IP}${USER_IP6:+, ${USER_IP6}}
-DNS = 8.8.8.8, 8.8.4.4${USER_IP6:+, 2001:4860:4860::8888, 2001:4860:4860::8844}
+Address = ${USER_IP}${USER_IP6:+, ${USER_IP6}}${CLIENT_DNS:+
+DNS = ${CLIENT_DNS}}
 ${AWG_PARAMS}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
 Endpoint = ${EFFECTIVE_SERVER_HOST}:${SERVER_PORT}
-AllowedIPs = 0.0.0.0/0${USER_IP6:+, ::/0}
+AllowedIPs = ${CLIENT_ALLOWED_IPS}
 PersistentKeepalive = 20
 PresharedKey = ${USER_PSK_KEY}
 EOF
