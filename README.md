@@ -42,8 +42,9 @@ cp .env.example .env
 | `SERVER_PORT` | `43748` | UDP listen port |
 | `SERVER_INTERFACE` | auto (default route) | External interface for NAT; `-I` overrides it |
 | `SERVER_HOST` | — | Host/IP clients connect to; `-s` overrides it |
-| `CLIENT_DNS` | `8.8.8.8, 8.8.4.4` (+ Google IPv6 DNS with IPv6) | `DNS` of new user configs; set it empty (`CLIENT_DNS=`) to omit the line |
-| `CLIENT_ALLOWED_IPS` | `0.0.0.0/0` (+ `::/0` with IPv6) | `AllowedIPs` of new user configs, e.g. `10.10.90.0/24` for a VPN between clients only |
+| `SERVER_MODE` | `internet` | `internet`: clients go out through the server; `local`: clients only reach each other (see [Firewall](#firewall)) |
+| `CLIENT_DNS` | `8.8.8.8, 8.8.4.4` (+ Google IPv6 DNS with IPv6); empty in `local` mode | `DNS` of new user configs; set it empty (`CLIENT_DNS=`) to omit the line |
+| `CLIENT_ALLOWED_IPS` | `0.0.0.0/0` (+ `::/0` with IPv6); in `local` mode the VPN subnet: `<SERVER_IP_PREFIX>.0/24` (+ `<SERVER_IP6_PREFIX>/120`) | `AllowedIPs` of new user configs |
 
 All variables are optional: missing ones fall back to the defaults above.
 Variables set in the environment take precedence over `.env` (see below).
@@ -174,7 +175,10 @@ On init `PostUp`/`PostDown` rules are written to the server config, so they exis
  - clients are NATed (`MASQUERADE`) on `SERVER_INTERFACE`.
 
 The `FORWARD` rules are added for IPv6 too when `SERVER_IP6_PREFIX` is set, the IPv6 NAT rule only for a ULA prefix.
-Traffic between clients is not allowed; add `PostUp = iptables -I FORWARD 1 -i %i -o %i -j ACCEPT` (and the matching `PostDown`) if needed.
+Traffic between clients is not allowed.
+
+With `SERVER_MODE=local` there is no NAT and no way out: the only `FORWARD` rule allows traffic between clients
+(`-i %i -o %i`), and user configs get no `DNS` and only the VPN subnet in `AllowedIPs`.
 
 ## Usage amneziawg-go
 

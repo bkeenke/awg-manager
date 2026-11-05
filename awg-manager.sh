@@ -33,7 +33,7 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 if [ -f "${SCRIPT_DIR}/.env" ]; then
     # Variables set in the environment take precedence over .env
     declare -A ENV_OVERRIDES
-    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_IP6_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST CLIENT_DNS CLIENT_ALLOWED_IPS; do
+    for VAR in HOME_DIR SERVER_NAME SERVER_IP_PREFIX SERVER_IP6_PREFIX SERVER_PORT SERVER_INTERFACE SERVER_HOST SERVER_MODE CLIENT_DNS CLIENT_ALLOWED_IPS; do
         if [ -n "${!VAR+x}" ]; then
             ENV_OVERRIDES[$VAR]="${!VAR}"
         fi
@@ -53,10 +53,21 @@ SERVER_IP6_PREFIX="${SERVER_IP6_PREFIX}"
 SERVER_PORT="${SERVER_PORT:-43748}"
 SERVER_INTERFACE="${SERVER_INTERFACE:-$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)}"
 SERVER_HOST="${SERVER_HOST}"
+# internet: clients go out through the server; local: clients only reach each other
+SERVER_MODE="${SERVER_MODE:-internet}"
+if [ "$SERVER_MODE" != "internet" ] && [ "$SERVER_MODE" != "local" ]; then
+    echo "ERROR: SERVER_MODE must be internet or local" >&2
+    exit 1
+fi
 # Written to new user configs; set CLIENT_DNS empty to omit the DNS line
-# (e.g. CLIENT_ALLOWED_IPS=10.10.90.0/24 and CLIENT_DNS= for a VPN between clients only)
-CLIENT_DNS="${CLIENT_DNS-8.8.8.8, 8.8.4.4${SERVER_IP6_PREFIX:+, 2001:4860:4860::8888, 2001:4860:4860::8844}}"
-CLIENT_ALLOWED_IPS="${CLIENT_ALLOWED_IPS:-0.0.0.0/0${SERVER_IP6_PREFIX:+, ::/0}}"
+if [ "$SERVER_MODE" == "local" ]; then
+    # User addresses are <prefix>2 … <prefix>fe, so /120 covers all of them
+    CLIENT_DNS="${CLIENT_DNS-}"
+    CLIENT_ALLOWED_IPS="${CLIENT_ALLOWED_IPS:-${SERVER_IP_PREFIX}.0/24${SERVER_IP6_PREFIX:+, ${SERVER_IP6_PREFIX}/120}}"
+else
+    CLIENT_DNS="${CLIENT_DNS-8.8.8.8, 8.8.4.4${SERVER_IP6_PREFIX:+, 2001:4860:4860::8888, 2001:4860:4860::8844}}"
+    CLIENT_ALLOWED_IPS="${CLIENT_ALLOWED_IPS:-0.0.0.0/0${SERVER_IP6_PREFIX:+, ::/0}}"
+fi
 
 # Support --help, help, usage
 for arg in "$@"; do
@@ -251,10 +262,17 @@ function init {
 
     # Open the listen port, let clients out (FORWARD may end with REJECT) and NAT them.
     # A public IPv6 prefix is routed without NAT; new connections from outside to clients are dropped.
+    # In local mode clients are only allowed to reach each other.
     local IPT IPTABLES=iptables
     [ -z "$SERVER_IP6_PREFIX" ] || IPTABLES="iptables ip6tables"
     local FIREWALL=""
     for IPT in $IPTABLES; do
+        if [ "$SERVER_MODE" == "local" ]; then
+            FIREWALL+="PostUp = ${IPT} -I FORWARD 1 -i %i -o %i -j ACCEPT
+PostDown = ${IPT} -D FORWARD -i %i -o %i -j ACCEPT
+"
+            continue
+        fi
         if [ "$IPT" == "iptables" ] || [[ "${SERVER_IP6_PREFIX,,}" =~ ^f[cd] ]]; then
             FIREWALL+="PostUp = ${IPT} -t nat -A POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
 PostDown = ${IPT} -t nat -D POSTROUTING -o ${SERVER_INTERFACE} -j MASQUERADE
