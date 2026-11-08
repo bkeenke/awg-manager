@@ -1,5 +1,7 @@
 # awg-manager
 
+**English** | [Русский](README.ru.md)
+
 AmneziaWG manager allow initialize AmneziaWG server and manage users.
 
 You can start the AmneziaWG server with one command, and then create (and delete) users.
