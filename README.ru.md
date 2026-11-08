@@ -156,7 +156,8 @@ HOME_DIR/
 
 ## Быстрый старт
 
-Запустите сервер (bare-metal или VPS) с Ubuntu 20.04, 22.04
+Запустите сервер (bare-metal или VPS) с Ubuntu 20.04, 22.04 или 24.04.
+Ubuntu 26.04 (ядро 7.0) тоже работает после [исправления amneziawg-dkms](#amneziawg-dkms-не-собирается-на-ядре-70).
 
 ```
 sudo bash -c "$(curl -sL https://raw.githubusercontent.com/bkeenke/awg-manager/master/init.sh)" @ install
