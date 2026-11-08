@@ -1,5 +1,7 @@
 # awg-manager
 
+**English** | [Русский](README.ru.md)
+
 AmneziaWG manager allow initialize AmneziaWG server and manage users.
 
 You can start the AmneziaWG server with one command, and then create (and delete) users.
@@ -140,7 +142,8 @@ from `<server>.conf` into the client config. Parameters with empty values are sk
 
 ## Quick start
 
-Run server (bare-metal or VPS) with Ubuntu 20.02, 22.02
+Run server (bare-metal or VPS) with Ubuntu 20.04, 22.04 or 24.04.
+Ubuntu 26.04 (kernel 7.0) works too after the [amneziawg-dkms fix](#amneziawg-dkms-fails-to-build-on-kernel-70).
 
 ```
 sudo bash -c "$(curl -sL https://raw.githubusercontent.com/bkeenke/awg-manager/master/init.sh)" @ install
@@ -294,7 +297,7 @@ Simply run:
 ```
 amneziawg-go awg0
 ```
-This will create an interface and fork into the background. To remove the interface, use the usual ip link del wg0, or if your system does not support removing interfaces directly, you may instead remove the control socket via rm -f /var/run/amneziawg/wg0.sock, which will result in amneziawg-go shutting down.
+This will create an interface and fork into the background. To remove the interface, use the usual ip link del awg0, or if your system does not support removing interfaces directly, you may instead remove the control socket via rm -f /var/run/amneziawg/awg0.sock, which will result in amneziawg-go shutting down.
 
 To run amneziawg-go without forking to the background, pass -f or --foreground:
 ```
