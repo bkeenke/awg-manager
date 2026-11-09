@@ -25,6 +25,11 @@ colorized_echo() {
     esac
 }
 
+usage() {
+    colorized_echo red "Usage: $0 install"
+    exit 1
+}
+
 installing() {
     check_running_as_root
     detect_os
